@@ -2,7 +2,9 @@ const crypto = require('crypto');
 const User = require('../models/user');
 const bcrypt = require('bcryptjs');
 const sgMail = require('@sendgrid/mail')
-const { validationResult } = require('express-validator');
+const {
+  validationResult
+} = require('express-validator');
 
 exports.getLogin = (req, res, next) => {
   // const isLoggedIn = req.get('Cookie').split('=')[1];
@@ -16,7 +18,8 @@ exports.getLogin = (req, res, next) => {
   res.render('auth/login', {
     path: '/login',
     pageTitle: 'Login',
-    errorMessage: message
+    errorMessage: message,
+    validationErrors: []
   });
 };
 
@@ -30,13 +33,30 @@ exports.getSignup = (req, res, next) => {
   res.render('auth/signup', {
     path: 'signup',
     pageTitle: 'Signup',
-    errorMessage: message
+    errorMessage: message,
+    oldInput: {
+      email: "",
+      password: '',
+      confirmPassword: ''
+    },
+    validationErrors: []
   });
 }
 
 exports.postLogin = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    return res.status(422).render('auth/login', {
+      path: '/login',
+      pageTitle: 'Login',
+      errorMessage: errors.array()[0].msg,
+      validationErrors: errors.array()
+    });
+  }
+
   User.findOne({
       email: email
     })
@@ -68,54 +88,50 @@ exports.postLogin = (req, res, next) => {
 exports.postSignup = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
-  const confirmPassword = req.body.confirmPassword;
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     console.log(errors.array())
     return res.status(422).render('auth/signup', {
       path: 'signup',
       pageTitle: 'Signup',
-      errorMessage: errors.array()[0].msg
+      errorMessage: errors.array()[0].msg,
+      oldInput: {
+        email: email,
+        password: password,
+        confirmPassword: req.body.confirmPassword
+      },
+      validationErrors: errors.array()
     });
   }
-  User.findOne({
-      email: email
-    }).then(userDoc => {
-      if (userDoc) {
-        req.flash('error', 'Email exists already.');
-        return res.redirect('/signup');
+
+  bcrypt.hash(password, 12)
+    .then(hashedPassword => {
+      const user = new User({
+        email: email,
+        password: hashedPassword,
+        cart: {
+          items: []
+        }
+      });
+      return user.save();
+    })
+    .then(result => {
+      res.redirect('/login');
+      sgMail.setApiKey(process.env.SEND_GRID_API)
+      const msg = {
+        to: email,
+        from: 'sarunas.lekstutis@gmail.com',
+        subject: 'Signup succeeded',
+        text: 'You successfully signed up.',
+        html: '<h1>You successfully signed up.</h1>'
       }
-      return bcrypt.hash(password, 12).then(hashedPassword => {
-          const user = new User({
-            email: email,
-            password: hashedPassword,
-            cart: {
-              items: []
-            }
-          });
-          return user.save();
-        })
-        .then(result => {
-          res.redirect('/login');
-          sgMail.setApiKey(process.env.SEND_GRID_API)
-          const msg = {
-            to: email,
-            from: 'sarunas.lekstutis@gmail.com',
-            subject: 'Signup succeeded',
-            text: 'You successfully signed up.',
-            html: '<h1>You successfully signed up.</h1>'
-          }
-          sgMail.send(msg).then(() => {
-            console.log('Email sent');
-          })
-        })
-        .catch(err => {
-          console.log(err);
-        });
+      sgMail.send(msg).then(() => {
+        console.log('Email sent');
+      })
     })
     .catch(err => {
       console.log(err);
-    });
+    })
 };
 
 exports.postLogout = (req, res, next) => {
@@ -218,24 +234,26 @@ exports.postNewPassword = (req, res, next) => {
   let resetUser;
 
   User.findOne({
-    resetToken: passwordToken,
-    resetTokenExpiration: {$gt: Date.now()},
-    _id: userId
-  })
-  .then(user => {
-    resetUser = user;
-    return bcrypt.hash(newPassword, 12);
-  })
-  .then(hashedPassword => {
-    resetUser.password = hashedPassword;
-    resetUser.resetToken = undefined;
-    resetUser.resetTokenExpiration = undefined;
-    return resetUser.save();
-  })
-  .then(result => {
-    res.redirect('/login');
-  })
-  .catch(err => {
-    console.log(err);
-  })
+      resetToken: passwordToken,
+      resetTokenExpiration: {
+        $gt: Date.now()
+      },
+      _id: userId
+    })
+    .then(user => {
+      resetUser = user;
+      return bcrypt.hash(newPassword, 12);
+    })
+    .then(hashedPassword => {
+      resetUser.password = hashedPassword;
+      resetUser.resetToken = undefined;
+      resetUser.resetTokenExpiration = undefined;
+      return resetUser.save();
+    })
+    .then(result => {
+      res.redirect('/login');
+    })
+    .catch(err => {
+      console.log(err);
+    })
 };
