@@ -17,13 +17,18 @@
     class="<%= validationErrors.find(e => e.param === 'email') ? 'invalid' : '' %>"
     type="text" 
     name="email" 
-    id="email">
+    id="email"
+    value="<%= oldInput.email %>"
+    >
+
    </div>
    <div class="form-control">
     <label for="password">Password</label>
     <input 
     class="<%= validationErrors.find(e => e.param === 'password') ? 'invalid' : '' %>"
-    type="password" name="password" id="password">
+    type="password" name="password" id="password"
+    value="<%= oldInput.password %>"
+    >
    </div>
    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
    <button class="btn" type="submit">Login</button>
