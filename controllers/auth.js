@@ -22,7 +22,7 @@ exports.getLogin = (req, res, next) => {
     validationErrors: [],
     oldInput: {
       email: '',
-      password: ' '
+      password: ''
     }
   });
 };
